@@ -17,12 +17,15 @@ def cari_teknisi(lokasi_input):
     data_teknisi = []
 
     with sync_playwright() as p:
-        # headless=False agar kamu bisa melihat pergerakan otomatisasi bot
-       
-        # Tambahkan argumen anti-deteksi bot
+        # Tambahkan argumen anti-crash khusus untuk server Cloud/Docker
         browser = p.chromium.launch(
             headless=True,
-            args=["--disable-blink-features=AutomationControlled"]
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu"
+            ]
         ) 
         
         # Pakaikan topeng manusia (Viewport Desktop, User-Agent Windows, dan Bahasa Indonesia)
