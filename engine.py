@@ -18,7 +18,7 @@ def cari_teknisi(lokasi_input):
 
     with sync_playwright() as p:
         # headless=False agar kamu bisa melihat pergerakan otomatisasi bot
-        browser = p.chromium.launch(headless=False) 
+       browser = p.chromium.launch(headless=True) 
         page = browser.new_page()
 
         # Looping 1: Berdasarkan Tingkat Daerah (Kelurahan -> Kecamatan -> Kabupaten)
