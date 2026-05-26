@@ -3,7 +3,13 @@ import streamlit as st
 import pandas as pd
 from engine import cari_teknisi
 
-os.system("playwright install chromium")
+# --- SCRIPT AUTO-INSTALL CHROMIUM (DENGAN CACHE) ---
+@st.cache_resource
+def install_browser():
+    os.system("playwright install chromium")
+    
+install_browser()
+
 # Konfigurasi halaman
 st.set_page_config(page_title="Pencari Teknisi", layout="wide")
 
