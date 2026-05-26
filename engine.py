@@ -165,7 +165,10 @@ def cari_teknisi(lokasi_input):
                         print(f"[{i+1}/{total_tempat}] ✅ Lolos & Ditarik: {nama.strip()} (Jarak: {jarak})")
 
                 except Exception as e:
-                    print(f"[INFO] Batas list tercapai atau area tidak ditemukan untuk {query}")
+                    print(f"[INFO] Gagal memuat data untuk {query}.")
+                    print(f"[DEBUG] Pesan Error Asli: {e}")
+                    print(f"[DEBUG] URL Terakhir yg dilihat bot: {page.url}")
+                    print(f"[DEBUG] Judul Halaman di Layar: {page.title()}")
 
         browser.close()
 
