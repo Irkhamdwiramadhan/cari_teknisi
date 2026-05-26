@@ -18,7 +18,7 @@ def cari_teknisi(lokasi_input):
 
     with sync_playwright() as p:
         # headless=False agar kamu bisa melihat pergerakan otomatisasi bot
-        with sync_playwright() as p:
+       
         # Tambahkan argumen anti-deteksi bot
         browser = p.chromium.launch(
             headless=True,
