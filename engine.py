@@ -17,101 +17,121 @@ def cari_teknisi(lokasi_input):
     data_teknisi = []
 
     with sync_playwright() as p:
-        # Tambahkan argumen anti-crash khusus untuk server Cloud/Docker
+        # Argumen anti-crash dan diet memori ekstrim untuk server Cloud
         browser = p.chromium.launch(
             headless=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
-                "--disable-gpu"
+                "--disable-gpu",
+                "--disable-features=site-per-process", 
+                "--disable-software-rasterizer"
             ]
         ) 
         
-        # Pakaikan topeng manusia (Viewport Desktop, User-Agent Windows, dan Bahasa Indonesia)
+        # Pakaikan topeng manusia dengan resolusi HD (1280x720) agar RAM server lega
         context = browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
+            viewport={'width': 1280, 'height': 720},
             user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             locale='id-ID',
             timezone_id='Asia/Jakarta'
         )
         page = context.new_page()
-        # Looping 1: Berdasarkan Tingkat Daerah (Kelurahan -> Kecamatan -> Kabupaten)
+
+        # Looping 1: Berdasarkan Tingkat Daerah
         for area in daftar_lokasi:
             if not area: continue
             
-            # Looping 2: Berdasarkan Kata Kunci (Komputer -> CCTV)
+            # Looping 2: Berdasarkan Kata Kunci
             for keyword in kata_kunci:
                 query = f"{keyword} di {area}"
                 print(f"\n=======================================================")
                 print(f"[INFO] 🔍 MENCARI (MAX {MAX_PER_KATEGORI}): {query.upper()}")
                 print(f"=======================================================")
                 
-                # Menggunakan URL direct search resmi Google Maps yang paling stabil untuk bot
+                # Menggunakan URL direct search resmi Google Maps
                 url = f"https://www.google.com/maps/search/{query.replace(' ', '+')}"
-                page.goto(url)
-
+                
                 try:
-                    # Tunggu sampai list tempat di sebelah kiri benar-benar muncul
+                    # Timeout 60 detik agar tidak putus asa saat koneksi melambat
+                    page.goto(url, timeout=60000)
+
                     feed_selector = 'div[role="feed"]'
                     page.wait_for_selector(feed_selector, timeout=15000)
-                    time.sleep(3) 
+                    time.sleep(3.5) 
 
-                    # Ambil handle elemen list kiri untuk keperluan scrolling via JavaScript
                     sidebar = page.locator(feed_selector).first
 
-                    # -- TAHAP A: KUMPULKAN LINK TEMPAT (SCROLLING DENGAN BATAS KUOTA) --
-                    print(f"[INFO] Mencari kandidat terdekat...")
-                    links_tempat = set()
+                    print(f"[INFO] Mencari kandidat terdekat dan mengidentifikasi informasi jarak...")
+                    
+                    dict_kandidat = {}
                     
                     percobaan_scroll_mentok = 0
                     waktu_mulai = time.time()
                     
-                    while percobaan_scroll_mentok < 6:
-                        # Ambil semua elemen link yang termuat saat ini
-                        elemen_terlihat = page.locator('a[href*="/maps/place/"]').all()
-                        for el in elemen_terlihat:
-                            href = el.get_attribute('href')
-                            if href: links_tempat.add(href)
+                    # -- TAHAP A: SCROLL & AMBIL JARAK --
+                    while percobaan_scroll_mentok < 5:
+                        links_el = page.locator('a[href*="/maps/place/"]').all()
                         
-                        # 🛑 REVISI BREAK: Jika link yang terkumpul sudah mencapai/melebihi kuota, stop scroll!
-                        if len(links_tempat) >= MAX_PER_KATEGORI:
-                            print(f"[DEBUG] Target {MAX_PER_KATEGORI} kandidat terpenuhi di list sidebar.")
+                        for el in links_el:
+                            href = el.get_attribute('href')
+                            if href and href not in dict_kandidat:
+                                jarak_toko = "Cek di alamat"
+                                
+                                try:
+                                    card_parent = el.locator('xpath=./ancestor::div[contains(@class, "Nv2ybe") or contains(@class, "hfpxzc") or @role="article" or @jsaction]').first
+                                    if card_parent.count() > 0:
+                                        spans = card_parent.locator('span').all()
+                                        for span in spans:
+                                            txt = span.inner_text().strip()
+                                            if len(txt) < 15 and (' km' in txt or ' m' in txt) and 'mnt' not in txt and 'jam' not in txt:
+                                                jarak_toko = txt
+                                                break
+                                except:
+                                    pass 
+                                
+                                dict_kandidat[href] = jarak_toko
+                        
+                        if len(dict_kandidat) >= MAX_PER_KATEGORI:
+                            print(f"[DEBUG] Target {MAX_PER_KATEGORI} kandidat terdekat terpenuhi.")
                             break
                         
-                        jumlah_sebelumnya = len(links_tempat)
+                        jumlah_sebelumnya = len(dict_kandidat)
                         
-                        # EXECUTE JAVASCRIPT: Menggulung scrollbar tepat di dalam komponen panel kiri
                         sidebar.evaluate("el => el.scrollTo(0, el.scrollHeight)")
-                        time.sleep(3) # Jeda loading agar server mengirimkan sisa data
+                        time.sleep(3) 
                         
-                        # Cek apakah setelah di-scroll, data bertambah
-                        if len(links_tempat) == jumlah_sebelumnya:
-                            # Trik hentakan: scroll ke atas sedikit, lalu banting ke bawah lagi
+                        if len(dict_kandidat) == jumlah_sebelumnya:
                             sidebar.evaluate("el => el.scrollBy(0, -300)")
                             time.sleep(0.5)
                             sidebar.evaluate("el => el.scrollTo(0, el.scrollHeight)")
                             time.sleep(2)
-                            
                             percobaan_scroll_mentok += 1
                         else:
-                            percobaan_scroll_mentok = 0 # Reset hitungan jika data sukses bertambah
+                            percobaan_scroll_mentok = 0 
                             
-                        # Batas aman waktu scrolling maksimal 45 detik per kata kunci daerah
-                        if time.time() - waktu_mulai > 45:
+                        if time.time() - waktu_mulai > 50:
                             break
                     
-                    # 🛑 REVISI SLICING: Pastikan kita hanya mengambil maksimal 15 teratas (jarak terdekat)
-                    list_links = list(links_tempat)[:MAX_PER_KATEGORI]
-                    total_tempat = len(list_links)
-                    print(f"\n[INFO] 🔥 SELESAI SISIR LIST! Memproses {total_tempat} tempat terdekat.")
+                    list_kandidat = list(dict_kandidat.items())[:MAX_PER_KATEGORI]
+                    total_tempat = len(list_kandidat)
+                    
+                    # FALLBACK MODE DARURAT
+                    if total_tempat == 0:
+                        print("[INFO] Mode deteksi jarak gagal, mengaktifkan mode Fallback Darurat...")
+                        elements_fallback = page.locator('a[href*="/maps/place/"]').all()
+                        list_kandidat = [(el.get_attribute('href'), "Cek di alamat") for el in elements_fallback if el.get_attribute('href')][:MAX_PER_KATEGORI]
+                        total_tempat = len(list_kandidat)
 
-                    # -- TAHAP B: EKSTRAKSI & FILTER NOMOR TELEPON --
-                    for i, link in enumerate(list_links):
-                        page.goto(link)
-                        time.sleep(2.5) # Tunggu panel detail toko terbuka penuh
+                    print(f"\n[INFO] 🔥 SELESAI SISIR LIST! Memproses detail {total_tempat} tempat terdekat.")
 
-                        # 1. Cek Nomor Telepon Dahulu (Sebagai Validasi Utama)
+                    # -- TAHAP B: EKSTRAKSI DETAIL --
+                    for i, (link, jarak) in enumerate(list_kandidat):
+                        # Timeout 45 detik untuk setiap detail toko
+                        page.goto(link, timeout=45000)
+                        time.sleep(2.5) 
+
                         telp_locator = page.locator('button[data-tooltip*="nomor telepon"]')
                         if telp_locator.count() > 0:
                             telp_raw = telp_locator.first.get_attribute('aria-label') or ""
@@ -119,16 +139,13 @@ def cari_teknisi(lokasi_input):
                         else:
                             telepon = "Tidak ada nomor"
 
-                        # 🛑 JIKA TIDAK ADA NOMOR TELEPON, LANGSUNG SKIP KANDIDAT INI
                         if telepon == "Tidak ada nomor" or not telepon or "Tutup" in telepon:
                             print(f"[{i+1}/{total_tempat}] ⏭️ Di-skip: Tidak ada nomor telepon.")
                             continue
 
-                        # 2. Ambil Nama Toko
                         nama_locator = page.locator('h1.DUwDvf')
                         nama = nama_locator.first.inner_text() if nama_locator.count() > 0 else "Nama tidak diketahui"
 
-                        # 3. Ambil Alamat Toko
                         alamat_locator = page.locator('button[data-item-id="address"]')
                         if alamat_locator.count() > 0:
                             alamat_raw = alamat_locator.first.get_attribute('aria-label') or ""
@@ -136,26 +153,25 @@ def cari_teknisi(lokasi_input):
                         else:
                             alamat = "Alamat tidak tersedia"
 
-                        # Simpan data yang lolos kualifikasi nomor kontak
+                        # Menyimpan 'Jarak' wajib ada agar app.py tidak error
                         data_teknisi.append({
                             "Pencarian": keyword.title(),
                             "Area": area.title(),
                             "Nama": nama.strip(),
                             "Alamat": alamat,
-                            "Nomor Telepon": telepon
+                            "Nomor Telepon": telepon,
+                            "Jarak": jarak
                         })
-                        print(f"[{i+1}/{total_tempat}] ✅ Lolos & Ditarik: {nama.strip()} ({telepon})")
+                        print(f"[{i+1}/{total_tempat}] ✅ Lolos & Ditarik: {nama.strip()} (Jarak: {jarak})")
 
                 except Exception as e:
                     print(f"[INFO] Batas list tercapai atau area tidak ditemukan untuk {query}")
 
         browser.close()
 
-    # Masukkan seluruh data ke DataFrame
     df = pd.DataFrame(data_teknisi)
     
     if not df.empty:
-        # Bersihkan data jika ada entitas ganda yang terjaring di beberapa level wilayah
         df = df.drop_duplicates(subset=['Nama', 'Nomor Telepon'])
         df.reset_index(drop=True, inplace=True)
         
