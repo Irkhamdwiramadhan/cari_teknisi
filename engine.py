@@ -18,9 +18,21 @@ def cari_teknisi(lokasi_input):
 
     with sync_playwright() as p:
         # headless=False agar kamu bisa melihat pergerakan otomatisasi bot
-        browser = p.chromium.launch(headless=True) 
-        page = browser.new_page()
-
+        with sync_playwright() as p:
+        # Tambahkan argumen anti-deteksi bot
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"]
+        ) 
+        
+        # Pakaikan topeng manusia (Viewport Desktop, User-Agent Windows, dan Bahasa Indonesia)
+        context = browser.new_context(
+            viewport={'width': 1920, 'height': 1080},
+            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            locale='id-ID',
+            timezone_id='Asia/Jakarta'
+        )
+        page = context.new_page()
         # Looping 1: Berdasarkan Tingkat Daerah (Kelurahan -> Kecamatan -> Kabupaten)
         for area in daftar_lokasi:
             if not area: continue
